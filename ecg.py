@@ -1,9 +1,11 @@
 import sys
 import numpy as np
+from pyqtgraph.examples.VideoSpeedTest import iterations_counter
 from scipy.signal import find_peaks
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                             QPushButton, QMessageBox, QLabel, QFileDialog)
-from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                             QPushButton, QMessageBox, QLabel, QFileDialog, QHBoxLayout)
+from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtCore import Qt
 import pyqtgraph as pg
 
 
@@ -40,14 +42,15 @@ class ECGApp(QMainWindow):
 
         # Track which abnormal condition has already triggered an alert
         self.alerted_conditions = set()
-
+        self.alert_iterations = 0  # Counter for keeping alert longer
+        self.alert_duration = 10
     def initUI(self):
         self.setWindowTitle('ECG Analysis')
-        self.setGeometry(100, 100, 800, 600)
-        
-        central_widget = QWidget()
-        layout = QVBoxLayout()
-        
+        self.setStyleSheet("QMainWindow { color: white; background-color: #1A1A1A; }")
+        self.setGeometry(50, 50, 1400, 800)
+        # self.setStyleSheet("background-color:  #1A1A1A ;")
+
+
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setLabel('left', 'Amplitude')
         self.plot_widget.setLabel('bottom', 'Time (s)')
@@ -56,24 +59,125 @@ class ECGApp(QMainWindow):
         self.plot_widget.setMouseEnabled(x=False, y=False)
         self.plot_widget.getAxis("left").setVisible(False)
         self.plot_widget.getAxis("bottom").setVisible(False)
+        self.plot_widget.setBackground('#1A1A1A')
         self.plot_curve = self.plot_widget.plot()
-        
+
+
+        self.heartRateLabel = QLabel("HR (bpm)")
+        self.heartRateValLabel = QLabel("000")
+        self.heartRateValLabel.setFixedWidth(int(self.width()*3/20))
+
+        self.heartRateLabel.setStyleSheet("""
+                                            color: Lime;
+                                            font-size: 14px;
+                                            font-weight: bold;
+                                            """)
+        self.heartRateLabel.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.heartRateValLabel.setStyleSheet("""
+                                            margin-top: 2px;
+                                            color: Lime;
+                                            font-size: 100px;
+                                            font-weight: bold;
+                                            """)
+        self.heartRateValLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         self.status_label = QLabel("Status: Ready")
         self.file_label = QLabel("No file selected")
+
+        self.file_label.setStyleSheet("""
+                                 color: white;
+                                 font-size: 12px;
+                                 font-weight: bold;
+                                  """)
         
         # Buttons
-        self.load_btn = QPushButton("Load ECG File")
+        self.load_btn = QPushButton("Load")
         self.load_btn.clicked.connect(self.load_file)
-        self.start_btn = QPushButton("Start Analysis")
+        self.start_btn = QPushButton("Start \nAnalysis")
         self.start_btn.clicked.connect(self.start_analysis)
         self.start_btn.setEnabled(False)
-        
-        layout.addWidget(self.plot_widget)
-        layout.addWidget(self.status_label)
-        layout.addWidget(self.file_label)
-        layout.addWidget(self.load_btn)
-        layout.addWidget(self.start_btn)
-        
+
+        self.start_btn.setStyleSheet("""
+                                    background-color:  white;
+                                    font-weight: bold;
+                                    """)
+        self.load_btn.setStyleSheet("""
+                                    background-color:  white;
+                                    font-weight: bold;
+                                    """)
+
+        self.start_btn.setFixedSize(70,70)
+        self.load_btn.setFixedSize(70,70)
+
+        self.createAlertPanel()
+        self.setupLayout()
+
+    def createAlertPanel(self):
+        self.alertLabel = QLabel("Normal")
+        self.alertLabel.setStyleSheet("""
+            margin-left: 20px;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+        """)
+        self.alertLabel.setFixedHeight(40)
+        self.alertLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.alertLED1 = QPushButton()
+        self.alertLED2 = QPushButton()
+        self.alertLED3 = QPushButton()
+
+        style = """
+            background-color:  #00bcd4;
+            border-top-left-radius: 10px;
+            border-bottom-right-radius: 10px;
+            border: none;
+        """
+
+        for btn in [self.alertLED1, self.alertLED2, self.alertLED3]:
+            btn.setStyleSheet(style)
+            btn.setFixedSize(120, 20)
+            btn.setEnabled(False)
+
+    def setupLayout(self):
+        central_widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20,20,20,20)
+
+        alertPanelLayout = QHBoxLayout()
+        alertPanelLayout.addWidget(self.alertLED1)
+        alertPanelLayout.addWidget(self.alertLED2)
+        alertPanelLayout.addWidget(self.alertLED3)
+        alertPanelLayout.addWidget(self.alertLabel)
+        alertPanelLayout.addStretch()
+
+        heartRateLayout = QVBoxLayout()
+        heartRateLayout.addStretch()
+        heartRateLayout.addWidget(self.heartRateLabel)
+        heartRateLayout.addWidget(self.heartRateValLabel)
+        heartRateLayout.addStretch()
+
+        monitorLayout = QHBoxLayout()
+        monitorLayout.addWidget(self.plot_widget)
+        monitorLayout.addLayout(heartRateLayout)
+
+        # layout.addWidget(self.plot_widget)
+        # layout.addWidget(self.status_label)
+        # layout.addWidget(self.file_label)
+
+        buttonsLayout = QHBoxLayout()
+        buttonsLayout.addWidget(self.load_btn)
+        buttonsLayout.addWidget(self.start_btn)
+        buttonsLayout.addWidget(self.file_label)
+        buttonsLayout.addStretch()
+
+        # layout.addWidget(self.load_btn)
+        # layout.addWidget(self.start_btn)
+
+        layout.addLayout(alertPanelLayout,10)
+        layout.addLayout(monitorLayout,80)
+        layout.addLayout(buttonsLayout,10)
+
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
 
@@ -129,7 +233,8 @@ class ECGApp(QMainWindow):
         if self.current_index >= len(self.ecg_data):
             self.timer.stop()
             self.final_diagnosis()
-            self.status_label.setText("Analysis complete")
+            # self.status_label.setText("Analysis complete")
+            self.alertLabel.setText("Analysis complete")
             self.start_btn.setEnabled(True)
             return
 
@@ -175,9 +280,12 @@ class ECGApp(QMainWindow):
             inst_hr = 60 / latest_rr
 
             # Update status label with heart rate and latest RR
-            self.status_label.setText(
-                f"Heart Rate: {inst_hr:.1f} bpm | Latest RR: {latest_rr:.3f}s"
-            )
+            # self.status_label.setText(
+            #     f"Heart Rate: {inst_hr:.1f} bpm | Latest RR: {latest_rr:.3f}s"
+            # )
+
+
+            self.heartRateValLabel.setText(f"{inst_hr:.0f}")
 
             # For the current chunk, perform simplified QRS width estimation:
             # Here we take the segment between the last two peaks.
@@ -192,14 +300,65 @@ class ECGApp(QMainWindow):
             
             # Analyze the current condition based on RR intervals and QRS widths
             condition = self.analyze_current_condition()
-            self.status_label.setText(
-                f"Heart Rate: {inst_hr:.1f} bpm | Condition: {condition}"
-            )
+            # self.status_label.setText(
+            #     f"Heart Rate: {inst_hr:.1f} bpm | Condition: {condition}"
+            # )
+            self.alertLabel.setText(condition)
+            self.heartRateValLabel.setText(f"{inst_hr:.0f}")
+
+
+
             # Show alert if condition is abnormal and not already alerted
-            if condition != "Normal" and condition not in self.alerted_conditions:
+            # if condition != "Normal" and condition not in self.alerted_conditions:
+            #     # self.alerted_conditions.add(condition)
+            #     # self.show_alert(condition, inst_hr)
+            #     iterationsAfterAlert = 0
+            #
+            #     style = """
+            #                 background-color:  #Red;
+            #                 border-top-left-radius: 10px;
+            #                 border-bottom-right-radius: 10px;
+            #                 border: none;
+            #             """
+            # else:
+            #     style = """
+            #                 background-color:  #00bcd4;
+            #                 border-top-left-radius: 10px;
+            #                 border-bottom-right-radius: 10px;
+            #                 border: none;
+            #             """
+            #
+            # for btn in [self.alertLED1, self.alertLED2, self.alertLED3]:
+            #         btn.setStyleSheet(style)
+
+            # Keep the alert ON for a set number of iterations
+            print(f"Condition detected: {condition}")
+
+            if condition != "Normal":
                 self.alerted_conditions.add(condition)
+                self.alert_iterations = self.alert_duration  # Reset counter
                 # self.show_alert(condition, inst_hr)
-                
+
+            # Decrease counter every iteration
+            if self.alert_iterations > 0:
+                style = """
+                            background-color: #ff0000; /* Red */
+                            border-top-left-radius: 10px;
+                            border-bottom-right-radius: 10px;
+                            border: none;
+                        """
+                self.alert_iterations -= 1  # Countdown
+            else:
+                style = """
+                            background-color: #00bcd4; /* Default */
+                            border-top-left-radius: 10px;
+                            border-bottom-right-radius: 10px;
+                            border: none;
+                        """
+
+            for btn in [self.alertLED1, self.alertLED2, self.alertLED3]:
+                btn.setStyleSheet(style)
+
         self.current_index = end_idx
 
     def calculate_heart_rate(self, signal):
