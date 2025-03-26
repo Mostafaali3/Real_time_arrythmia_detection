@@ -26,7 +26,18 @@ class ECGApp(QMainWindow):
         # For arrhythmia detection (using RR intervals and QRS widths)
         self.rr_intervals = []  # list of detected RR intervals (in seconds)
         self.qrs_widths = []    # corresponding QRS widths (in seconds)
-        
+
+        #plotting -talal
+        self.window_size = 500
+        # Fixed and updated initialization
+        self.fixedX = np.linspace(0, (self.window_size - 1) / self.fs, self.window_size)
+        self.plottedY = np.zeros(self.window_size)
+        self.plot_curve = self.plot_widget.plot(self.fixedX, self.plottedY, pen=pg.mkPen(color="lime", width=2))
+
+
+        self.index = 0
+        # self.plot_curve = self.plot_widget.plot(self.x, self.y, pen=pg.mkPen(color="lime", width=2))
+
         # Track which abnormal condition has already triggered an alert
         self.alerted_conditions = set()
 
@@ -41,6 +52,10 @@ class ECGApp(QMainWindow):
         self.plot_widget.setLabel('left', 'Amplitude')
         self.plot_widget.setLabel('bottom', 'Time (s)')
         self.plot_widget.setYRange(-3, 3)
+        self.plot_widget.showGrid(x=True, y=False)
+        self.plot_widget.setMouseEnabled(x=False, y=False)
+        self.plot_widget.getAxis("left").setVisible(False)
+        self.plot_widget.getAxis("bottom").setVisible(False)
         self.plot_curve = self.plot_widget.plot()
         
         self.status_label = QLabel("Status: Ready")
@@ -103,7 +118,8 @@ class ECGApp(QMainWindow):
         self.status_label.setText("Status: Starting analysis...")
         
         try:
-            self.timer.start(int(self.plot_interval * 1000))
+            self.timer.start(int(self.plot_interval * 200))
+            # self.timer.start(2000)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start analysis: {str(e)}")
             self.start_btn.setEnabled(True)
@@ -124,13 +140,28 @@ class ECGApp(QMainWindow):
         new_y = self.ecg_data[self.current_index:end_idx]
         self.x.extend(new_x.tolist())
         self.y.extend(new_y.tolist())
-        self.plot_curve.setData(self.x, self.y)
+
+        #Plotting Patiet Monitor Update and data
+
+        if self.index < len(self.ecg_data):
+            pos = self.index % self.window_size  # Get position in fixed window
+            self.plottedY[pos] = self.ecg_data[self.index]  # Insert new ECG value
+
+            #OFFSET
+            for i in range(1, 20):
+                if pos + i < self.window_size:
+                    self.plottedY[pos + i] = np.nan
+
+            self.index += 1
+
+        self.plot_curve.setData(self.fixedX, self.plottedY, connect="finite")  # Update graph
+
 
         # Slide window on x-axis
-        if self.x[-1] > 5:
-            self.plot_widget.setXRange(self.x[-1] - 5, self.x[-1])
-        else:
-            self.plot_widget.setXRange(0, 5)
+        # if self.x[-1] > 5:
+        #     self.plot_widget.setXRange(self.x[-1] - 5, self.x[-1])
+        # else:
+        #     self.plot_widget.setXRange(0, 5)
 
         # Use entire data so far for peak detection and heart rate estimation
         data_so_far = np.array(self.y)
@@ -167,7 +198,7 @@ class ECGApp(QMainWindow):
             # Show alert if condition is abnormal and not already alerted
             if condition != "Normal" and condition not in self.alerted_conditions:
                 self.alerted_conditions.add(condition)
-                self.show_alert(condition, inst_hr)
+                # self.show_alert(condition, inst_hr)
                 
         self.current_index = end_idx
 
