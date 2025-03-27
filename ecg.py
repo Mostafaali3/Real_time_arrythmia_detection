@@ -337,8 +337,6 @@ class ECGApp(QMainWindow):
             # for btn in [self.alertLED1, self.alertLED2, self.alertLED3]:
             #         btn.setStyleSheet(style)
 
-            # Keep the alert ON for a set number of iterations
-            print(f"Condition detected: {condition}")
 
             if condition != "Normal":
                 self.alerted_conditions.add(condition)
