@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-from pyqtgraph.examples.VideoSpeedTest import iterations_counter
+# from pyqtgraph.examples.VideoSpeedTest import iterations_counter
 from scipy.signal import find_peaks
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QPushButton, QMessageBox, QLabel, QFileDialog, QHBoxLayout)
@@ -43,7 +43,7 @@ class ECGApp(QMainWindow):
         # Track which abnormal condition has already triggered an alert
         self.alerted_conditions = set()
         self.alert_iterations = 0  # Counter for keeping alert longer
-        self.alert_duration = 10
+        self.alert_duration = 300
     def initUI(self):
         self.setWindowTitle('ECG Analysis')
         self.setStyleSheet("QMainWindow { color: white; background-color: #1A1A1A; }")
@@ -222,8 +222,9 @@ class ECGApp(QMainWindow):
         self.status_label.setText("Status: Starting analysis...")
         
         try:
-            self.timer.start(int(self.plot_interval * 200))
+            # self.timer.start(int(self.plot_interval * 200))
             # self.timer.start(2000)
+            self.timer.start(int(1 / self.fs * 1000))
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to start analysis: {str(e)}")
             self.start_btn.setEnabled(True)
@@ -269,15 +270,21 @@ class ECGApp(QMainWindow):
         #     self.plot_widget.setXRange(0, 5)
 
         # Use entire data so far for peak detection and heart rate estimation
+        ## remove fluctuations
         data_so_far = np.array(self.y)
         threshold = np.mean(data_so_far) + np.std(data_so_far)
-        peaks, _ = find_peaks(data_so_far, height=threshold, distance=self.fs//2)
-        if len(peaks) > 1:
+        # peaks, _ = find_peaks(data_so_far, height=threshold, distance=self.fs//2)
+        # if len(peaks) > 1:
+        #     # Compute instantaneous heart rate based on latest RR
+        #     inst_hr = 60 / latest_rr
+        # In update_plot method, replace heart rate calculation with:
+        peaks, _ = find_peaks(data_so_far, height=threshold, distance=self.fs // 2)
+        if len(peaks) > 2:
+            inst_hr = self.calculate_stable_heart_rate(peaks, self.fs)
+            self.heartRateValLabel.setText(f"{inst_hr:.0f}")
             # Compute latest RR interval from the last two peaks
             latest_rr = (peaks[-1] - peaks[-2]) / self.fs
             self.rr_intervals.append(latest_rr)
-            # Compute instantaneous heart rate based on latest RR
-            inst_hr = 60 / latest_rr
 
             # Update status label with heart rate and latest RR
             # self.status_label.setText(
@@ -303,7 +310,6 @@ class ECGApp(QMainWindow):
             # self.status_label.setText(
             #     f"Heart Rate: {inst_hr:.1f} bpm | Condition: {condition}"
             # )
-            self.alertLabel.setText(condition)
             self.heartRateValLabel.setText(f"{inst_hr:.0f}")
 
 
@@ -337,6 +343,8 @@ class ECGApp(QMainWindow):
             if condition != "Normal":
                 self.alerted_conditions.add(condition)
                 self.alert_iterations = self.alert_duration  # Reset counter
+                # set text to the last element in the alerted condition set
+                self.alertLabel.setText(condition)
                 # self.show_alert(condition, inst_hr)
 
             # Decrease counter every iteration
@@ -349,6 +357,7 @@ class ECGApp(QMainWindow):
                         """
                 self.alert_iterations -= 1  # Countdown
             else:
+                self.alertLabel.setText("Normal")
                 style = """
                             background-color: #00bcd4; /* Default */
                             border-top-left-radius: 10px;
@@ -360,6 +369,42 @@ class ECGApp(QMainWindow):
                 btn.setStyleSheet(style)
 
         self.current_index = end_idx
+
+    def calculate_stable_heart_rate(self, peaks, sampling_rate):
+        """
+        Calculate a more stable heart rate using multiple RR intervals.
+
+        Args:
+            peaks (numpy.ndarray): Array of peak indices
+            sampling_rate (float): Sampling frequency of the signal
+
+        Returns:
+            float: Stable heart rate in beats per minute
+        """
+        if len(peaks) < 3:
+            return 0
+
+        # Calculate RR intervals
+        rr_intervals = np.diff(peaks) / sampling_rate
+
+        # Remove outliers (RR intervals more than 1.5 times the interquartile range)
+        q1, q3 = np.percentile(rr_intervals, [25, 75])
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+
+        filtered_intervals = rr_intervals[
+            (rr_intervals >= lower_bound) &
+            (rr_intervals <= upper_bound)
+            ]
+
+        # Calculate heart rate from filtered intervals
+        if len(filtered_intervals) > 0:
+            avg_rr_interval = np.mean(filtered_intervals)
+            heart_rate = 60 / avg_rr_interval
+            return heart_rate
+
+        return 0
 
     def calculate_heart_rate(self, signal):
         # Compute heart rate from peaks in the given signal
