@@ -371,23 +371,12 @@ class ECGApp(QMainWindow):
         self.current_index = end_idx
 
     def calculate_stable_heart_rate(self, peaks, sampling_rate):
-        """
-        Calculate a more stable heart rate using multiple RR intervals.
 
-        Args:
-            peaks (numpy.ndarray): Array of peak indices
-            sampling_rate (float): Sampling frequency of the signal
-
-        Returns:
-            float: Stable heart rate in beats per minute
-        """
         if len(peaks) < 3:
             return 0
 
-        # Calculate RR intervals
         rr_intervals = np.diff(peaks) / sampling_rate
 
-        # Remove outliers (RR intervals more than 1.5 times the interquartile range)
         q1, q3 = np.percentile(rr_intervals, [25, 75])
         iqr = q3 - q1
         lower_bound = q1 - 1.5 * iqr
@@ -398,7 +387,6 @@ class ECGApp(QMainWindow):
             (rr_intervals <= upper_bound)
             ]
 
-        # Calculate heart rate from filtered intervals
         if len(filtered_intervals) > 0:
             avg_rr_interval = np.mean(filtered_intervals)
             heart_rate = 60 / avg_rr_interval
@@ -407,7 +395,6 @@ class ECGApp(QMainWindow):
         return 0
 
     def calculate_heart_rate(self, signal):
-        # Compute heart rate from peaks in the given signal
         try:
             threshold = np.mean(signal) + np.std(signal)
             peaks, _ = find_peaks(signal, height=threshold, distance=self.fs//2)
@@ -438,7 +425,6 @@ class ECGApp(QMainWindow):
         ARn = np.mean(self.rr_intervals[-8:])  # Average RR over last 8 intervals
         prev_rr = self.rr_intervals[-2] if len(self.rr_intervals) > 1 else RRn
 
-        # Apply detection criteria (tolerance of 0.1s)
         if RRn > 1.5 or ARn > 1.2:
             return "Bradycardia"
         if ARn < 0.6:
